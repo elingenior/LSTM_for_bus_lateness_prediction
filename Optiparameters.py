@@ -51,22 +51,27 @@ try :
 except:
     print('out alreay exist')
 # In[7]:
+###############################################################################
+# DELTE THIS DATAPICKLE DIR
+###############################################################################
 
+def get_data(dt):
+    print(dt)
+    with open(os.getcwd()+ '/BusFrame32_%i.pickle' %dt,'rb') as f:
 
-with open(os.getcwd()+'/BusFrame32.pickle','rb') as f:
-
-    FrameT = pickle.load(f)
+        FrameT = pickle.load(f)
     
-FrameT[np.isnan(FrameT)] = 0
-# FrameT[FrameT>400] = 0
-# FrameT[FrameT<-400] = 0
-# FrameT = FrameT[:2,:,:,:,:]
-meanF = np.mean(FrameT)
-FrameT -= meanF
-std = np.std(abs(FrameT))
-FrameT /= std 
+    FrameT[np.isnan(FrameT)] = 0
+    # FrameT[FrameT>400] = 0
+    # FrameT[FrameT<-400] = 0
+    FrameT = FrameT[:20,:,:,:,:]
+    meanF = np.mean(FrameT)
+    FrameT -= meanF
+    std = np.std(abs(FrameT))
+    FrameT /= std 
 
-out_dt = 10
+    return FrameT
+out_dt = 1
 in_dt = 30
 dt = 30
 
@@ -76,22 +81,33 @@ endtime = 9*3600
 # 6.5 -- 10.5
 in_data = [6.5*3600,10.5*3600]
 
-diff = int((starttime- in_data[0])/dt)
+in_dt_dic = dict({30:[1,5,10,20,40,60,100]
+              ,60: [1,5,10,20,40,60]
+              ,120: [1,5,10,20,40,60]
+              ,300: [1,5,10,20]
+              ,900: [1,2,5]
+              })
 
-for out_dt in [1,5,10,20,40,60,100]:
-    out_dt = int(out_dt)
-    for in_dt in [1,5,10,20,40,60,100]:
+for dt in [30,60,120,300,900]:
+    print(dt)
+    dt = int(dt)
+    FrameT = get_data(dt) 
+    diff = int((starttime- in_data[0])/dt)
+
+    
+    for in_dt in in_dt_dic[dt]:
         in_dt = int(in_dt)
+               
         input_bus = np.ndarray((FrameT.shape[0],int((endtime-out_dt-starttime)/dt),in_dt,1,FrameT.shape[3],FrameT.shape[4]))#FrameT.shape[2]
         output_bus = np.ndarray((FrameT.shape[0],int((endtime-out_dt-starttime)/dt),out_dt,FrameT.shape[3],FrameT.shape[4]))
         for i in range(int((endtime-out_dt-starttime)/dt)):
             input_bus[:,i,:,:,:,:] = FrameT[:,(diff+i-in_dt):(diff+i),2:,:,:]
             output_bus[:,i,:,:,:] = FrameT[:,(diff+i):(diff+i+out_dt),2,:,:]
             
-        vali = input_bus[[0,6,12,18,24,29,34],:,:,:,:]
-        valo = output_bus[[0,6,12,18,24,29,34],:,:,:,:]
-        input_bus = np.delete(input_bus,[0,6,12,18,24,29,34], axis = 0)
-        output_bus = np.delete(output_bus,[0,6,12,18,24,29,34], axis = 0)
+        vali = input_bus[[0,6,12,18],:,:,:,:] #,24,29,34
+        valo = output_bus[[0,6,12,18],:,:,:,:]
+        input_bus = np.delete(input_bus,[0,6,12,18], axis = 0)
+        output_bus = np.delete(output_bus,[0,6,12,18], axis = 0)
         
         batch_size =input_bus.shape[1]
         print(batch_size)
@@ -122,10 +138,10 @@ for out_dt in [1,5,10,20,40,60,100]:
         
             for N in range(NL):
                 if N == (NL-1):
-                    __model.add(ConvLSTM2D(name =('conv_lstm_%i_enc' %i),filters=filters[N], kernel_size=(kernel[N], 1),stateful=False
+                    __model.add(ConvLSTM2D(name =('lstm_%i_enc' %N),filters=filters[N], kernel_size=(kernel[N], 1),stateful=False
                                    , padding='same', return_sequences=False,data_format  ="channels_first"))
                 else:
-                    __model.add(ConvLSTM2D(name =('conv_lstm_%i_enc' %i),filters=filters[N], kernel_size=(kernel[N], 1),stateful=False
+                    __model.add(ConvLSTM2D(name =('lstm_%i_enc' %N),filters=filters[N], kernel_size=(kernel[N], 1),stateful=False
                                    , padding='same', return_sequences=True,data_format  ="channels_first"))
                     
                 __model.add(Dropout(dropout))
@@ -140,7 +156,7 @@ for out_dt in [1,5,10,20,40,60,100]:
         
             for N in range(NL):
                 
-                __model.add(ConvLSTM2D(name =('conv_lstm_%i_dec' %i),filters=filters[-N], kernel_size=(kernel[-N], 1),stateful=False
+                __model.add(ConvLSTM2D(name =('lstm_%i_dec' %N),filters=filters[-N], kernel_size=(kernel[-N], 1),stateful=False
                                    , padding='same', return_sequences=True))
                 __model.add(Dropout(dropout))
         
@@ -155,25 +171,26 @@ for out_dt in [1,5,10,20,40,60,100]:
             
             return __model
             del(__model)
-        def fit_with(inputs): #unit1,unit2,kernel1,kernel2
+       def fit_with(inputs): #unit1,unit2,kernel1,kernel2
             NL = int((len(inputs)-1)/2)
             __filters = inputs[:NL].astype('int')
             __kernel = inputs[NL:2*NL].astype('int')
             __dropout = inputs[-1]
             
+            
+            # return np.array([1,2,3,4,5])
             __model = model_creator(__filters,__kernel,__dropout,NL)
-        
+            __t1 = time.time()
             __model.compile(loss=kl.mean_absolute_error, optimizer = 'adam')
-            __hist = __model.fit(input_bus, output_bus, epochs=50,
+            __hist = __model.fit(input_bus, output_bus, epochs=30,
                                       batch_size=batch_size, verbose=0, shuffle=False)
-        
             __error =  np.sum(abs(valo - __model.predict(vali)))/(valo.shape[0]*valo.shape[1]*valo.shape[2])
             # print('error',__filters,__kernel,__dropout ,'is compile')
-            return np.array([__error,__filters,__kernel,NL])
-            del(__error,__model)#,__hist
+            return np.array([__error,__filters,__kernel,NL,__dropout,time.time()-__t1])
+            del(__error,__model,__hist)
         
         
-        # In[5]:
+                # In[5]:
         
         
         filters = [4,8,16,32,64,128]
@@ -184,28 +201,57 @@ for out_dt in [1,5,10,20,40,60,100]:
         # In[8]:
         
         
-        NL = [1,2,3]
-        tot_cpu = os.cpu_count() 
-        pool = mp.Pool(int(tot_cpu/4) )
-        results_1 = pool.map(fit_with,np.array(np.meshgrid(filters,kernel,dropout)).T.reshape(-1,3))
+        NL_list = [1,2,3]
+        # tot_cpu = os.cpu_count() 
+        # pool = mp.Pool(tot_cpu-1)
+        # results_1 = np.empty((6*4*5,6))
+        # results_2 = np.empty((6*4*6*4*5,6))
+        results_1 = np.repeat(np.array([[0,[0],[0],0,0,0],[0,[0],[0],0,0,0]]),6*4*5 , axis=0)
+        results_2 = np.repeat(np.array([[0,[0],[0],0,0,0],[0,[0],[0],0,0,0]]),6*4*6*4*5 , axis=0)
+        results_3 = np.repeat(np.array([[0,[0],[0],0,0,0],[0,[0],[0],0,0,0]]),6*4*6*4*6*4*5 , axis=0)
+        i = 0
+        for input_i in np.array(np.meshgrid(filters,kernel,dropout)).T.reshape(-1,3):
+            results_1[i,:] = fit_with(input_i)
+            i+= 1
+        print('NL 1: over')
+        with open(os.getcwd()+'/out/Results%i_%i_1.pickle' %(dt,in_dt),'wb') as pelo:
+            pickle.dump(results_1,pelo)
+        
+        
+        i = 0
+        for input_i in np.array(np.meshgrid(filters,filters,kernel,kernel,dropout)).T.reshape(-1,5):
+            results_2[i,:] = fit_with(input_i)
+            i+= 1
+        print('NL 2: over')
+        with open(os.getcwd()+'/out/Results%i_%i_2.pickle' %(dt,in_dt),'wb') as pelo:
+            pickle.dump(results_2,pelo)
+     
+            
+            
+            
+        # i = 0
+        # for input_i in np.array(np.meshgrid(filters,filters,filters,kernel,kernel,kernel,dropout)).T.reshape(-1,7):
+        #     results_3[i,:] = fit_with(input_i)
+        #     i+= 1
+        # print('NL 3: over')
+        # with open(os.getcwd()+'/out/Results%i_%i_3.pickle' %(dt,in_dt),'wb') as pelo:
+        #     pickle.dump(results_3,pelo)
+    
+            
+        
+        # results_1 = pool.map(fit_with,np.array(np.meshgrid(filters,kernel,dropout)).T.reshape(-1,3))
         # print('NL == 1 over')
-        results_2 = pool.map(fit_with,np.array(np.meshgrid(filters,filters,kernel,kernel,dropout)).T.reshape(-1,5))
+        # results_2 = pool.map(fit_with,np.array(np.meshgrid(filters,filters,kernel,kernel,dropout)).T.reshape(-1,5))
         # print('NL == 2 over')
         
-        results_3 = pool.map(fit_with,np.array(np.meshgrid(filters,filters,filters,kernel,kernel,kernel,dropout)).T.reshape(-1,7))
+        # results_3 = pool.map(fit_with,np.array(np.meshgrid(filters,filters,filters,kernel,kernel,kernel,dropout)).T.reshape(-1,7))
         # print('NL == 3 over')
         
-        pool.close()
-        pool.join()
+        # pool.close()
+        # pool.join()
         
         
         # In[9]:
-        
-        
-        with open(os.getcwd()+'out/Results%i_%i.pickle' %(out_dt,in_dt),'wb') as pelo:
-            pickle.dump(results_1,pelo)
-            pickle.dump(results_2,pelo)
-            pickle.dump(results_3,pelo)
         
         # In[ ]:
         
