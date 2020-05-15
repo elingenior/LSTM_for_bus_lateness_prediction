@@ -54,10 +54,10 @@ except:
 ###############################################################################
 # DELTE THIS DATAPICKLE DIR
 ###############################################################################
-
+e = 0
 def get_data(dt):
-    print(dt)
-    with open(os.getcwd()+ '/BusFrame32_%i.pickle' %dt,'rb') as f:
+    # print(dt)
+    with open(os.getcwd()+ '/Alexis/BusFrame32_%i.pickle' %dt,'rb') as f:
 
         FrameT = pickle.load(f)
     
@@ -87,12 +87,10 @@ in_dt_dic = dict({30:[1,5,10,20,40,60,100]
               ,300: [1,5,10,20]
               ,900: [1,2,5]
               })
+out_dt_error= np.empty((26,4))
 
-results = np.empty((26,4))
-results[:] = 0
-iteration = 0
 for dt in [30,60,120,300,900]:
-    print(dt)
+    # print(dt)
     dt = int(dt)
     FrameT = get_data(dt) 
     diff = int((starttime- in_data[0])/dt)
@@ -189,6 +187,7 @@ for dt in [30,60,120,300,900]:
                                       batch_size=batch_size, verbose=0, shuffle=False)
             __error =  np.sum(abs(valo - __model.predict(vali)))/(valo.shape[0]*valo.shape[1]*valo.shape[2])
             # print('error',__filters,__kernel,__dropout ,'is compile')
+            # __error = 0
             return np.array([__error,time.time()-__t1])
             del(__error,__model,__hist)
         
@@ -196,19 +195,49 @@ for dt in [30,60,120,300,900]:
                 # In[5]:
         
         
-        filters = 32
-        kernel = 5
+        filters = [4,8,16,32,64,128]
+        kernel = [1,2,5,10]
+        dropout = [0.05,0.1,0.2,0.35,0.5]
+        
+        selected_kernel = np.array([5,2,1])
+        selected_filters = np.array([1,2,3])
         dropout = 0.4
-        
-        inputs = [32,5,0.4]
         # In[8]:
+        inputs = np.append(selected_filters,selected_kernel)
+        inputs = np.append(inputs,dropout)
+        
+        out = fit_with(inputs)
+        out_dt_error[e,:] = np.append(np.append(out,in_dt),dt)
+        
+        e+= 1
+        # NL_list = [1,2,3]
+        # # tot_cpu = os.cpu_count() 
+        # # pool = mp.Pool(tot_cpu-1)
+        # # results_1 = np.empty((6*4*5,6))
+        # # results_2 = np.empty((6*4*6*4*5,6))
+        # results_1 = np.repeat(np.array([[0,[0],[0],0,0,0],[0,[0],[0],0,0,0]]),6*4*5 , axis=0)
+        # results_2 = np.repeat(np.array([[0,[0],[0],0,0,0],[0,[0],[0],0,0,0]]),6*4*6*4*5 , axis=0)
+        # results_3 = np.repeat(np.array([[0,[0],[0],0,0,0],[0,[0],[0],0,0,0]]),6*4*6*4*6*4*5 , axis=0)
+        # i = 0
+        # for input_i in np.array(np.meshgrid(filters,kernel,dropout)).T.reshape(-1,3):
+        #     results_1[i,:] = fit_with(input_i)
+        #     i+= 1
+        # print('NL 1: over')
+        # with open(os.getcwd()+'/out/Results%i_%i_1.pickle' %(dt,in_dt),'wb') as pelo:
+        #     pickle.dump(results_1,pelo)
         
         
-        
+        # i = 0
+        # for input_i in np.array(np.meshgrid(filters,filters,kernel,kernel,dropout)).T.reshape(-1,5):
+        #     results_2[i,:] = fit_with(input_i)
+        #     i+= 1
+        # print('NL 2: over')
+        # with open(os.getcwd()+'/out/Results%i_%i_2.pickle' %(dt,in_dt),'wb') as pelo:
+        #     pickle.dump(results_2,pelo)
+     
             
-        results[iteration,:2] = [dt,in_dt]
-        results[iteration,2:] = fit_with(inputs)
-        iteration += 1  
+            
+            
         # i = 0
         # for input_i in np.array(np.meshgrid(filters,filters,filters,kernel,kernel,kernel,dropout)).T.reshape(-1,7):
         #     results_3[i,:] = fit_with(input_i)
@@ -217,7 +246,7 @@ for dt in [30,60,120,300,900]:
         # with open(os.getcwd()+'/out/Results%i_%i_3.pickle' %(dt,in_dt),'wb') as pelo:
         #     pickle.dump(results_3,pelo)
     
-          
+            
         
         # results_1 = pool.map(fit_with,np.array(np.meshgrid(filters,kernel,dropout)).T.reshape(-1,3))
         # print('NL == 1 over')
